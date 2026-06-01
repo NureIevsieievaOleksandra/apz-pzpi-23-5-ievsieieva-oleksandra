@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smartlight-backend
+  namespace: smartlight
+spec:
+  replicas: 1        # Починаємо з 1, потім масштабуємо для демонстрації
+  selector:
+    matchLabels:
+      app: smartlight-backend
+  template:
+    metadata:
+      labels:
+        app: smartlight-backend
+    spec:
+      containers:
+        - name: smartlight-backend
+          image: smartlight:latest
+          imagePullPolicy: Never   # Використовуємо локальний образ з Docker Desktop
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DB_URL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DB_PASSWORD
+            - name: PG_PASSWORD      # Для AdminRoute (pg_dump/restore)
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DB_PASSWORD
+          readinessProbe:
+            tcpSocket:               # TCP замість HTTP — бо немає /health ендпоінту
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartlight-service
+  namespace: smartlight
+spec:
+  selector:
+    app: smartlight-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer   # Docker Desktop автоматично пробрасує на localhost
